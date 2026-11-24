@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pointage 2nd tour</title>
+<style>
+/* Mise en page : une colonne de fiches, barre de recherche collée en haut, gros boutons au pouce. */
+:root {
+  --fond: #f3f5f9;
+  --carte: #ffffff;
+  --texte: #16203a;
+  --doux: #5b6580;
+  --trait: #dde2ec;
+  --accent: #1f3f8f;        /* bleu robe/Ordre */
+  --accent-texte: #ffffff;
+  --vert: #18794e; --vert-fond: #dcf3e5;
+  --bleu: #1d5fbf; --bleu-fond: #e2edfc;
+  --jaune: #8a5a00; --jaune-fond: #fff0c7;
+  --orange: #a14a12; --orange-fond: #fde4d3;
+  --gris: #5f6672; --gris-fond: #eceef2;
+  --violet: #6b3fa0; --violet-fond: #efe6fa;
+  --ombre: 0 1px 2px rgba(22,32,58,.08);
+  --police: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--fond); color: var(--texte); font-family: var(--police); font-size: 16px;
+  line-height: 1.35; -webkit-text-size-adjust: 100%;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.cache { display: none !important; }
+
+/* ---------- Écran d'accueil ---------- */
+#accueil { max-width: 460px; margin: 0 auto; padding: 32px max(16px, env(safe-area-inset-left)) 40px; }
+#accueil h1 { font-size: 1.5rem; margin: 0 0 4px; text-wrap: balance; }
+#accueil p { color: var(--doux); margin: 0 0 24px; }
+.champ { display: grid; gap: 6px; margin-bottom: 20px; }
+.champ label { font-weight: 600; }
+.champ input {
+  width: 100%; padding: 14px 14px; border: 2px solid var(--trait); border-radius: 10px;
+  background: var(--carte); font-size: 1.1rem;
+}
+.qui { display: flex; flex-wrap: wrap; gap: 8px; }
+.qui button {
+  padding: 12px 16px; border-radius: 999px; border: 2px solid var(--trait); background: var(--carte);
+  font-weight: 600;
+}
+.qui button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-texte); }
+.gros {
+  width: 100%; padding: 16px; border: 0; border-radius: 12px; background: var(--accent);
+  color: var(--accent-texte); font-weight: 700; font-size: 1.1rem;
+}
+.erreur { color: #b42318; font-weight: 600; min-height: 1.4em; }
+
+/* ---------- En-tête ---------- */
+header {
+  position: sticky; top: 0; z-index: 5; background: var(--accent); color: var(--accent-texte);
+  padding: calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.ligne-haut { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ligne-haut h1 { margin: 0; font-size: 1.05rem; }
+.moi { background: rgba(255,255,255,.16); border: 0; color: inherit; padding: 6px 10px; border-radius: 999px; font-size: .9rem; }
+.compteurs { display: flex; gap: 14px; margin: 8px 0 10px; font-size: .9rem; flex-wrap: wrap; }
+.compteurs b { font-size: 1.25rem; font-variant-numeric: tabular-nums; margin-right: 3px; }
+#recherche {
+  width: 100%; padding: 12px 14px; border-radius: 10px; border: 0; font-size: 1.05rem;
+  background: var(--carte); color: var(--texte);
+}
+.onglets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.onglets button {
+  border: 0; border-radius: 9px; padding: 9px 4px; background: rgba(255,255,255,.14); color: inherit; font-weight: 600; font-size: .92rem;
+}
+.onglets button[aria-pressed="true"] { background: var(--carte); color: var(--accent); }
+.filtres { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; scrollbar-width: none; }
+.filtres button {
+  flex: none; border: 1px solid rgba(255,255,255,.45); background: transparent; color: inherit;
+  border-radius: 999px; padding: 6px 12px; font-size: .85rem;
+}
+.filtres button[aria-pressed="true"] { background: rgba(255,255,255,.95); color: var(--accent); border-color: transparent; font-weight: 700; }
+#etat-reseau { font-size: .8rem; opacity: .85; margin-top: 6px; min-height: 1em; }
+
+/* ---------- Liste ---------- */
+main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-inset-right)) 120px max(16px, env(safe-area-inset-left)); }
+.aide { color: var(--doux); font-size: .9rem; margin: 2px 0 12px; }
+#liste { display: grid; gap: 10px; }
+.fiche {
+  background: var(--carte); border-radius: 14px; box-shadow: var(--ombre); border: 1px solid var(--trait);
+  padding: 12px; display: grid; gap: 10px; border-left: 6px solid var(--trait);
+}
+.fiche.s-a_vote { border-left-color: var(--vert); background: var(--vert-fond); }
+.fiche.s-va_voter { border-left-color: var(--bleu); }
+.fiche.s-en_cours { border-left-color: #e0a100; }
+.fiche.s-pas_repondu { border-left-color: var(--orange); }
+.fiche.s-contre { border-left-color: var(--gris); opacity: .75; }
+.nom { font-weight: 700; font-size: 1.1rem; overflow-wrap: anywhere; }
+.nom small { font-weight: 400; color: var(--doux); font-size: .85rem; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.badge { font-size: .78rem; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+.b-absent { background: var(--jaune-fond); color: var(--jaune); }
+.b-vote1 { background: var(--gris-fond); color: var(--gris); }
+.b-soutien { background: var(--violet-fond); color: var(--violet); }
+.info { font-size: .88rem; color: var(--doux); }
+.statut { font-size: .92rem; font-weight: 600; padding: 8px 10px; border-radius: 9px; display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.statut.s-a_vote { background: #c3e9d0; color: var(--vert); }
+.statut.s-va_voter { background: var(--bleu-fond); color: var(--bleu); }
+.statut.s-en_cours { background: var(--jaune-fond); color: var(--jaune); }
+.statut.s-pas_repondu { background: var(--orange-fond); color: var(--orange); }
+.statut.s-contre { background: var(--gris-fond); color: var(--gris); }
+.statut .remettre { background: transparent; border: 0; text-decoration: underline; color: inherit; font-size: .85rem; padding: 2px 0; }
+.note { font-size: .88rem; background: var(--fond); border-radius: 8px; padding: 6px 8px; overflow-wrap: anywhere; }
+.appeler {
+  display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none;
+  background: var(--accent); color: var(--accent-texte); border-radius: 12px; padding: 13px; font-weight: 700; font-size: 1.05rem;
+}
+.appeler span { font-weight: 400; font-variant-numeric: tabular-nums; opacity: .9; }
+.sans-tel { color: var(--doux); font-size: .9rem; text-align: center; padding: 8px; border: 1px dashed var(--trait); border-radius: 10px; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.actions button {
+  border: 2px solid var(--trait); background: var(--carte); border-radius: 11px; padding: 11px 6px; font-weight: 700; font-size: .95rem;
+}
+.actions .a-a_vote { border-color: var(--vert); color: var(--vert); }
+.actions .a-va_voter { border-color: var(--bleu); color: var(--bleu); }
+.actions .a-pas_repondu { border-color: var(--orange); color: var(--orange); }
+.actions .a-contre { border-color: #b9bec8; color: var(--gris); }
+.actions button[aria-pressed="true"] { color: #fff; }
+.actions .a-a_vote[aria-pressed="true"] { background: var(--vert); }
+.actions .a-va_voter[aria-pressed="true"] { background: var(--bleu); }
+.actions .a-pas_repondu[aria-pressed="true"] { background: var(--orange); }
+.actions .a-contre[aria-pressed="true"] { background: var(--gris); border-color: var(--gris); }
+.lien-note { background: transparent; border: 0; color: var(--accent); text-decoration: underline; font-size: .9rem; justify-self: start; padding: 2px 0; }
+.vide { text-align: center; color: var(--doux); padding: 40px 10px; }
+.plus { width: 100%; margin-top: 12px; padding: 12px; border-radius: 10px; border: 2px dashed var(--trait); background: transparent; font-weight: 600; color: var(--doux); }
+
+/* ---------- Bandeau de confirmation et fenêtre de note ---------- */
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom));
+  background: #16203a; color: #fff; padding: 12px 14px; border-radius: 12px; display: flex; gap: 14px; align-items: center;
+  width: max-content; max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 20; font-size: .95rem;
+}
+#toast button { background: transparent; border: 0; color: #9cc0ff; font-weight: 700; text-decoration: underline; }
+#fond-note { position: fixed; inset: 0; background: rgba(10,16,30,.45); display: grid; place-items: end center; z-index: 30; }
+#boite-note { background: var(--carte); width: 100%; max-width: 560px; border-radius: 16px 16px 0 0; padding: 18px max(16px, env(safe-area-inset-left)) calc(18px + env(safe-area-inset-bottom)); display: grid; gap: 12px; }
+#boite-note h2 { margin: 0; font-size: 1.1rem; }
+#texte-note { width: 100%; min-height: 90px; padding: 10px; border: 2px solid var(--trait); border-radius: 10px; font: inherit; }
+.deux { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.secondaire { padding: 14px; border-radius: 12px; border: 2px solid var(--trait); background: var(--carte); font-weight: 700; }
+@media (prefers-reduced-motion: no-preference) { .fiche { transition: background-color .25s; } }
+</style>
+</head>
+<body>
+
+<!-- Accueil : code équipe + prénom, mémorisés sur ce téléphone -->
+<section id="accueil" class="cache" aria-labelledby="titre-accueil">
+  <h1 id="titre-accueil">Pointage du 2nd tour</h1>
+  <p>Élection du Conseil de l’Ordre · jeudi 26 novembre · vote de 8 h à 17 h</p>
+  <form id="form-accueil">
+    <div class="champ">
+      <label for="code">Code de l’équipe</label>
+      <input id="code" autocomplete="off" autocapitalize="off" inputmode="text" required>
+    </div>
+    <div class="champ">
+      <label id="lbl-qui">Qui êtes-vous ?</label>
+      <div class="qui" role="group" aria-labelledby="lbl-qui" id="choix-qui"></div>
+      <input id="autre-nom" placeholder="Ou tapez votre prénom" autocomplete="off">
+    </div>
+    <p class="erreur" id="erreur-accueil" role="alert"></p>
+    <button class="gros" type="submit" id="entrer">Entrer</button>
+  </form>
+</section>
+
+<!-- Application -->
+<div id="appli" class="cache">
+  <header>
+    <div class="ligne-haut">
+      <h1>2nd tour · jeudi 26/11</h1>
+      <button class="moi" id="moi" type="button" title="Changer de nom"></button>
+    </div>
+    <div class="compteurs" aria-live="polite">
+      <div><b id="n-vote">0</b>ont voté</div>
+      <div><b id="n-promis">0</b>vont voter</div>
+      <div><b id="n-reste">0</b>à appeler</div>
+    </div>
+    <input id="recherche" type="search" placeholder="Chercher un nom…" autocomplete="off" aria-label="Chercher un nom">
+    <div class="onglets" role="group" aria-label="Afficher">
+      <button type="button" data-onglet="appeler" aria-pressed="true">À appeler</button>
+      <button type="button" data-onglet="vote" aria-pressed="false">Ont voté</button>
+      <button type="button" data-onglet="tous" aria-pressed="false">Tout</button>
+    </div>
+    <div class="filtres" role="group" aria-label="Filtrer">
+      <button type="button" data-filtre="tous" aria-pressed="true">Tout le monde</button>
+      <button type="button" data-filtre="soutien" aria-pressed="false">Nos soutiens</button>
+      <button type="button" data-filtre="absent" aria-pressed="false">Absents au 1er tour</button>
+      <button type="button" data-filtre="vote1" aria-pressed="false">Ont voté au 1er tour</button>
+      <button type="button" data-filtre="mes" aria-pressed="false">Mes appels</button>
+    </div>
+    <div id="etat-reseau"></div>
+  </header>
+  <main>
+    <p class="aide" id="aide"></p>
+    <div id="liste"></div>
+    <button class="plus cache" id="plus" type="button">Afficher plus de noms</button>
+  </main>
+</div>
+
+<div id="toast" class="cache" role="status"><span id="toast-texte"></span><button type="button" id="toast-annuler">Annuler</button></div>
+
+<div id="fond-note" class="cache">
+  <div id="boite-note" role="dialog" aria-modal="true" aria-labelledby="titre-note">
+    <h2 id="titre-note">Note</h2>
+    <textarea id="texte-note" maxlength="300" placeholder="Ex. : rappeler après 14 h, vote depuis le cabinet…"></textarea>
+    <div class="deux">
+      <button type="button" class="secondaire" id="note-fermer">Fermer</button>
+      <button type="button" class="gros" id="note-ok">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var EQUIPE = ['Vierginie', 'Sidibe', 'François', 'Saïd', 'Magou', 'Ali', 'Boubou'];
+  var API = 'https://script.google.com/macros/s/AKfycbxEQ7TD3e0T88wpJmA1XOctovK6RLgZvJ5MT1d84h8zxE8__6VLipNSQrQjy5hEOyiJ/exec';
+  var LIBELLES = {
+    a_vote: '✅ A voté', va_voter: '🗳️ Va voter', en_cours: '📞 En cours d’appel',
+    pas_repondu: '📵 Pas répondu', contre: '✖ Pas pour nous', a_appeler: 'À appeler'
+  };
+  var BOUTONS = [
+    ['a_vote', '✅ A voté'], ['va_voter', '🗳️ Va voter'],
+    ['pas_repondu', '📵 Pas répondu'], ['contre', '✖ Pas pour nous']
+  ];
+  var PAGE = 60;                 // fiches affichées d'un coup, pour rester rapide sur téléphone
+  var RAFRAICHIR_MS = 12000;
+
+  var etat = {
+    code: lire('code') || '', moi: lire('moi') || '',
+    electeurs: [], parId: {}, onglet: 'appeler', filtre: 'tous', recherche: '', limite: PAGE,
+    annulable: null
+  };
+
+  // ---------- Petites aides ----------
+  function lire(k) { try { return localStorage.getItem('pointage.' + k); } catch (e) { return null; } }
+  function ecrire(k, v) { try { localStorage.setItem('pointage.' + k, v); } catch (e) {} }
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function sansAccent(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function heure(ms) {
+    if (!ms) return '';
+    var d = new Date(ms);
+    return d.getHours() + 'h' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function depuis(ms) {
+    var m = Math.round((Date.now() - ms) / 60000);
+    if (m < 1) return 'à l’instant';
+    if (m < 60) return 'depuis ' + m + ' min';
+    return 'depuis ' + heure(ms);
+  }
+
+  // ---------- Accès aux données (script Google, sans compte) ----------
+  function appel(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    if (window.google && google.script && google.script.run) {   // page servie par Google ou page de test
+      return new Promise(function (ok, ko) {
+        var r = google.script.run.withSuccessHandler(ok).withFailureHandler(function (e) { ko(e); });
+        r[fn].apply(r, args);
+      });
+    }
+    return fetch(API, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: fn, args: args })
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r.ok) throw new Error(r.error || 'Erreur');
+      return r.data;
+    });
+  }
+
+  // ---------- Accueil ----------
+  function montrerAccueil(msg) {
+    $('appli').classList.add('cache');
+    $('accueil').classList.remove('cache');
+    $('code').value = etat.code;
+    var zone = $('choix-qui');
+    zone.innerHTML = EQUIPE.map(function (n) {
+      return '<button type="button" aria-pressed="' + (n === etat.moi) + '">' + esc(n) + '</button>';
+    }).join('');
+    if (etat.moi && EQUIPE.indexOf(etat.moi) < 0) $('autre-nom').value = etat.moi;
+    $('erreur-accueil').textContent = msg || '';
+  }
+  $('choix-qui').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    Array.prototype.forEach.call(this.children, function (x) { x.setAttribute('aria-pressed', x === b); });
+    $('autre-nom').value = '';
+  });
+  $('autre-nom').addEventListener('input', function () {
+    Array.prototype.forEach.call($('choix-qui').children, function (x) { x.setAttribute('aria-pressed', false); });
+  });
+  $('form-accueil').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var choisi = $('choix-qui').querySelector('[aria-pressed="true"]');
+    var nom = (choisi ? choisi.textContent : $('autre-nom').value).trim();
+    var code = $('code').value.trim();
+    if (!code) { $('erreur-accueil').textContent = 'Tapez le code de l’équipe.'; return; }
+    if (!nom) { $('erreur-accueil').textContent = 'Choisissez votre prénom, pour que les autres sachent qui appelle.'; return; }
+    etat.code = code; etat.moi = nom;
+    $('entrer').disabled = true; $('entrer').textContent = 'Chargement de la liste…';
+    charger().then(function () {
+      ecrire('code', code); ecrire('moi', nom);
+    }).catch(function (err) {
+      montrerAccueil(/code/i.test(String(err && err.message || err)) ? 'Code incorrect. Demandez-le à François.' : 'Pas de connexion. Réessayez.');
+    }).then(function () { $('entrer').disabled = false; $('entrer').textContent = 'Entrer'; });
+  });
+  $('moi').addEventListener('click', function () { montrerAccueil(); });
+
+  // ---------- Chargement ----------
+  function charger() {
+    return appel('chargerTout', etat.code).then(function (r) {
+      etat.electeurs = r.electeurs;
+      etat.parId = {};
+      r.electeurs.forEach(function (o) { o.cle = sansAccent(o.nom + ' ' + o.prenom + ' ' + o.prenom + ' ' + o.nom); etat.parId[o.id] = o; });
+      $('accueil').classList.add('cache');
+      $('appli').classList.remove('cache');
+      $('moi').textContent = '👤 ' + etat.moi;
+      rendre();
+      reseau('');
+    });
+  }
+
+  function rafraichir() {
+    if (!etat.electeurs.length || document.hidden) return;
+    appel('chargerStatuts', etat.code).then(function (r) {
+      var change = [];
+      etat.electeurs.forEach(function (o) {
+        var s = r.statuts[o.id] || ['a_appeler', '', 0, o.note || ''];
+        if (s[0] !== o.statut || s[1] !== o.par || s[2] !== o.maj || (s[3] || '') !== (o.note || '')) {
+          o.statut = s[0]; o.par = s[1]; o.maj = s[2]; o.note = s[3];
+          change.push(o.id);
+        }
+      });
+      change.forEach(majFiche);
+      compter();
+      reseau('');
+    }).catch(function () { reseau('⚠️ Hors connexion : la liste n’est plus à jour'); });
+  }
+  function reseau(t) { $('etat-reseau').textContent = t || ('À jour à ' + heure(Date.now()) + ' · mise à jour automatique'); }
+
+  // ---------- Filtres et affichage ----------
+  function visible(o) {
+    if (etat.onglet === 'appeler' && (o.statut === 'a_vote' || o.statut === 'contre')) return false;
+    if (etat.onglet === 'vote' && o.statut !== 'a_vote') return false;
+    if (etat.filtre === 'soutien' && !o.soutien) return false;
+    if (etat.filtre === 'absent' && o.t1) return false;
+    if (etat.filtre === 'vote1' && !o.t1) return false;
+    if (etat.filtre === 'mes' && o.par !== etat.moi) return false;
+    if (etat.recherche) {
+      var mots = etat.recherche.split(/\s+/);
+      for (var i = 0; i < mots.length; i++) if (o.cle.indexOf(mots[i]) < 0) return false;
+    }
+    return true;
+  }
+
+  function ficheHTML(o) {
+    var badges = [];
+    if (o.soutien) badges.push('<span class="badge b-soutien">Soutien</span>');
+    badges.push(o.t1
+      ? '<span class="badge b-vote1">A voté au 1er tour' + (o.h1 ? ' (' + esc(o.h1) + ')' : '') + '</span>'
+      : '<span class="badge b-absent">N’a pas voté au 1er tour</span>');
+    var h = '<div><div class="nom">' + esc(o.nom) + ' <small>' + esc(o.prenom) + '</small></div>' +
+            '<div class="badges">' + badges.join('') + '</div></div>';
+    if (o.info) h += '<div class="info">💬 ' + esc(o.info) + '</div>';
+    if (o.statut && o.statut !== 'a_appeler') {
+      var qui = o.par ? (o.par === etat.moi ? 'vous' : o.par) : '';
+      var txt = o.statut === 'en_cours'
+        ? '📞 ' + esc(qui === 'vous' ? 'Vous l’appelez' : qui + ' l’appelle') + ' ' + depuis(o.maj)
+        : LIBELLES[o.statut] + (qui ? ' · noté par ' + esc(qui) : '') + (o.maj ? ' à ' + heure(o.maj) : '');
+      h += '<div class="statut s-' + o.statut + '"><span>' + txt + '</span>' +
+           '<button type="button" class="remettre" data-action="a_appeler">Remettre à appeler</button></div>';
+    }
+    if (o.note) h += '<div class="note">📝 ' + esc(o.note) + '</div>';
+    if (o.statut !== 'a_vote') {
+      h += o.telIntl
+        ? '<a class="appeler" href="tel:' + esc(o.telIntl) + '" data-action="appel">📞 Appeler <span>' + esc(o.tel) + '</span></a>'
+        : '<div class="sans-tel">Pas de numéro dans la liste</div>';
+    }
+    h += '<div class="actions">' + BOUTONS.map(function (b) {
+      return '<button type="button" class="a-' + b[0] + '" data-action="' + b[0] + '" aria-pressed="' + (o.statut === b[0]) + '">' + b[1] + '</button>';
+    }).join('') + '</div>';
+    h += '<button type="button" class="lien-note" data-action="note">' + (o.note ? 'Modifier la note' : 'Ajouter une note') + '</button>';
+    return h;
+  }
+
+  function pers(n) { return n + (n > 1 ? ' personnes' : ' personne'); }
+
+  function rendre() {
+    var l = etat.electeurs.filter(visible);
+    var zone = $('liste');
+    var montres = l.slice(0, etat.limite);
+    zone.innerHTML = montres.map(function (o) {
+      return '<article class="fiche s-' + o.statut + '" data-id="' + o.id + '">' + ficheHTML(o) + '</article>';
+    }).join('') || '<div class="vide">Personne ici' + (etat.recherche ? ' pour « ' + esc(etat.recherche) + ' »' : '') + '.</div>';
+    $('plus').classList.toggle('cache', l.length <= etat.limite);
+    $('plus').textContent = 'Afficher plus de noms (' + (l.length - montres.length) + ' restants)';
+    var aide = {
+      appeler: pers(l.length) + '. Appuyez sur « Appeler » : les autres verront que vous êtes dessus. Après l’appel, appuyez sur le résultat.',
+      vote: pers(l.length) + ' nous ont dit avoir voté au 2nd tour.',
+      tous: l.length + (l.length > 1 ? ' électeurs.' : ' électeur.')
+    }[etat.onglet];
+    $('aide').textContent = aide;
+    compter();
+  }
+
+  function majFiche(id) {
+    var o = etat.parId[id];
+    var el = document.querySelector('.fiche[data-id="' + id + '"]');
+    if (!el || !o) return;
+    el.className = 'fiche s-' + o.statut;
+    el.innerHTML = ficheHTML(o);
+  }
+
+  function compter() {
+    var v = 0, p = 0, r = 0;
+    etat.electeurs.forEach(function (o) {
+      if (o.statut === 'a_vote') v++;
+      else if (o.statut === 'va_voter') p++;
+      if (o.statut !== 'a_vote' && o.statut !== 'contre') r++;
+    });
+    $('n-vote').textContent = v; $('n-promis').textContent = p; $('n-reste').textContent = r;
+  }
+
+  // ---------- Actions sur une fiche ----------
+  function changer(o, statut, note, silencieux) {
+    var avant = { statut: o.statut, par: o.par, maj: o.maj, note: o.note };
+    o.statut = statut; o.par = statut === 'a_appeler' ? '' : etat.moi; o.maj = Date.now();
+    if (note !== undefined) o.note = note;
+    majFiche(o.id); compter();
+    if (!silencieux) toast(o.nom + ' ' + o.prenom + ' : ' + (statut === 'a_appeler' ? 'remis à appeler' : LIBELLES[statut]), function () {
+      changer(o, avant.statut, avant.note, true);
+      o.par = avant.par;
+    });
+    return appel('changerStatut', etat.code, o.id, statut, etat.moi, note === undefined ? null : note)
+      .then(function (r) { o.maj = r.maj; o.par = r.par; o.note = r.note; majFiche(o.id); })
+      .catch(function () {
+        o.statut = avant.statut; o.par = avant.par; o.maj = avant.maj; o.note = avant.note;
+        majFiche(o.id); compter();
+        toast('⚠️ Pas enregistré (connexion). Réessayez.');
+      });
+  }
+
+  $('liste').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-action]'); if (!b) return;
+    var o = etat.parId[b.closest('.fiche').dataset.id];
+    var a = b.dataset.action;
+    if (a === 'appel') {
+      // On laisse le téléphone composer le numéro, et on prévient l'équipe.
+      if (o.statut === 'a_appeler' || o.statut === 'pas_repondu' || o.statut === 'va_voter' || (o.statut === 'en_cours' && o.par !== etat.moi)) {
+        if (o.statut === 'en_cours' && o.par && o.par !== etat.moi) {
+          if (!b.dataset.confirme) {
+            e.preventDefault();
+            b.dataset.confirme = '1';
+            b.innerHTML = '⚠️ ' + esc(o.par) + ' appelle déjà. Appuyez encore pour appeler quand même';
+            return;
+          }
+        }
+        changer(o, 'en_cours', undefined, true);
+      }
+      return;
+    }
+    if (a === 'note') { ouvrirNote(o); return; }
+    if (a === o.statut && a !== 'a_appeler') a = 'a_appeler';   // ré-appuyer annule
+    changer(o, a);
+  });
+
+  // ---------- Note ----------
+  var noteDe = null;
+  function ouvrirNote(o) {
+    noteDe = o;
+    $('titre-note').textContent = 'Note sur ' + o.nom + ' ' + o.prenom;
+    $('texte-note').value = o.note || '';
+    $('fond-note').classList.remove('cache');
+    setTimeout(function () { $('texte-note').focus(); }, 50);
+  }
+  function fermerNote() { $('fond-note').classList.add('cache'); noteDe = null; }
+  $('note-fermer').addEventListener('click', fermerNote);
+  $('fond-note').addEventListener('click', function (e) { if (e.target === this) fermerNote(); });
+  $('note-ok').addEventListener('click', function () {
+    var o = noteDe; if (!o) return;
+    var t = $('texte-note').value.trim();
+    fermerNote();
+    changer(o, o.statut === 'a_appeler' ? 'a_appeler' : o.statut, t);
+  });
+
+  // ---------- Bandeau ----------
+  var minuteur;
+  function toast(t, annuler) {
+    $('toast-texte').textContent = t;
+    $('toast-annuler').classList.toggle('cache', !annuler);
+    etat.annulable = annuler || null;
+    $('toast').classList.remove('cache');
+    clearTimeout(minuteur);
+    minuteur = setTimeout(function () { $('toast').classList.add('cache'); etat.annulable = null; }, 5000);
+  }
+  $('toast-annuler').addEventListener('click', function () {
+    var f = etat.annulable; $('toast').classList.add('cache'); etat.annulable = null;
+    if (f) f();
+  });
+
+  // ---------- Recherche, onglets, filtres ----------
+  var tempo;
+  $('recherche').addEventListener('input', function () {
+    var v = this.value;
+    clearTimeout(tempo);
+    tempo = setTimeout(function () { etat.recherche = sansAccent(v.trim()); etat.limite = PAGE; rendre(); }, 150);
+  });
+  document.querySelector('.onglets').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    etat.onglet = b.dataset.onglet; etat.limite = PAGE;
+    Array.prototype.forEach.call(this.children, function (x) { x.setAttribute('aria-pressed', x === b); });
+    rendre(); window.scrollTo(0, 0);
+  });
+  document.querySelector('.filtres').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    etat.filtre = b.dataset.filtre; etat.limite = PAGE;
+    Array.prototype.forEach.call(this.children, function (x) { x.setAttribute('aria-pressed', x === b); });
+    rendre(); window.scrollTo(0, 0);
+  });
+  $('plus').addEventListener('click', function () { etat.limite += PAGE; rendre(); });
+
+  setInterval(rafraichir, RAFRAICHIR_MS);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) rafraichir(); });
+  setInterval(function () { // garde « depuis X min » à jour
+    etat.electeurs.forEach(function (o) { if (o.statut === 'en_cours') majFiche(o.id); });
+  }, 60000);
+
+  // ---------- Démarrage ----------
+  if (etat.code && etat.moi) {
+    $('appli').classList.remove('cache');
+    $('liste').innerHTML = '<div class="vide">Chargement de la liste…</div>';
+    charger().catch(function () { montrerAccueil('Impossible de charger la liste. Vérifiez le code ou la connexion.'); });
+  } else {
+    montrerAccueil();
+  }
+})();
+</script>
+</body>
+</html>
