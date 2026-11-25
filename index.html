@@ -149,6 +149,7 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
 .choix-resultat .a-pas_repondu { border-color: var(--orange); color: var(--orange); }
 .choix-resultat .a-contre { border-color: #b9bec8; color: var(--gris); }
 #res-plus-tard { background: transparent; border: 0; color: var(--doux); text-decoration: underline; font-size: .95rem; padding: 8px; }
+#maj { display: block; width: 100%; margin-top: 8px; border: 0; border-radius: 10px; padding: 10px; background: #fff3c4; color: #5c4400; font-weight: 700; font-size: .95rem; }
 .bas { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lien-note { background: transparent; border: 0; color: var(--accent); text-decoration: underline; font-size: .9rem; padding: 2px 0; }
 .soutien-btn { border: 2px solid var(--violet); color: var(--violet); background: var(--carte); border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: .88rem; }
@@ -219,6 +220,7 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
       <button type="button" data-filtre="mes" aria-pressed="false">Mes appels</button>
     </div>
     <div id="etat-reseau"></div>
+    <button type="button" id="maj" class="cache">🔄 Nouvelle version de l’outil : touchez ici pour l’afficher</button>
   </header>
   <main>
     <p class="aide" id="aide"></p>
@@ -268,6 +270,7 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     ['pas_repondu', '📵 Pas répondu'], ['contre', '✖ Pas pour nous']
   ];
   var PAGE = 60;                 // fiches affichées d'un coup, pour rester rapide sur téléphone
+  var VERSION = '2026-11-26-1';
   var RAFRAICHIR_MS = 12000;
   var DUREE_APPEL_MS = 5 * 60000;   // au-delà, un appel sans résultat noté libère la fiche
 
@@ -673,6 +676,35 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     rendre(); window.scrollTo(0, 0);
   });
   $('plus').addEventListener('click', function () { etat.limite += PAGE; rendre(); });
+
+  // ---------- Mise à jour automatique de la page ----------
+  // Une page restée ouverte ne se recharge pas d'elle-même : on vérifie s'il existe une version plus récente.
+  var versionEnLigne = null;
+  function dialogueOuvert() {
+    return !$('fond-resultat').classList.contains('cache') || !$('fond-note').classList.contains('cache');
+  }
+  function recharger() {
+    if (!versionEnLigne) return;
+    location.replace(location.pathname + '?v=' + encodeURIComponent(versionEnLigne));
+  }
+  function verifierVersion() {
+    if (!window.fetch || location.protocol === 'file:') return;
+    fetch(location.pathname + '?verif=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.text(); })
+      .then(function (t) {
+        var m = t.match(/var VERSION = '([^']+)'/);
+        if (!m || m[1] === VERSION) return;
+        versionEnLigne = m[1];
+        $('maj').classList.remove('cache');
+        // Mise à jour tout de suite si personne n'est en train de noter un résultat.
+        if (!document.hidden && !dialogueOuvert() && !appelEnCours) recharger();
+      })
+      .catch(function () {});
+  }
+  $('maj').addEventListener('click', recharger);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) verifierVersion(); });
+  setInterval(verifierVersion, 2 * 60000);
+  setTimeout(verifierVersion, 5000);
 
   setInterval(rafraichir, RAFRAICHIR_MS);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { rafraichir(); verifierRetourAppel(); } });
