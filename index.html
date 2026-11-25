@@ -307,11 +307,6 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     var d = new Date(ms), n = new Date();
     return d.toDateString() === n.toDateString() ? '' : String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' ';
   }
-  var ACTIONS_HISTO = {
-    en_cours: 'a appelé', a_vote: 'a noté : ✅ A voté', va_voter: 'a noté : 🗳️ Va voter',
-    pas_repondu: 'a noté : 📵 Pas répondu', contre: 'a noté : ✖ Pas pour nous',
-    a_appeler: 'a remis « à appeler »', 'soutien ajouté': 'l’a classé ★ soutien', 'soutien retiré': 'l’a retiré des soutiens'
-  };
   function ajouterJournal(j, change) {
     if (!j) return;
     if (j.total < etat.jTotal) { etat.histo = {}; etat.jTotal = 0; return; }   // journal nettoyé : tout est relu au tour suivant
@@ -322,47 +317,27 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     });
     etat.jTotal = j.total;
   }
-  var ACTIONS_VOUS = {
-    en_cours: 'avez appelé', a_vote: 'avez noté : ✅ A voté', va_voter: 'avez noté : 🗳️ Va voter',
-    pas_repondu: 'avez noté : 📵 Pas répondu', contre: 'avez noté : ✖ Pas pour nous',
-    a_appeler: 'avez remis « à appeler »', 'soutien ajouté': 'l’avez classé ★ soutien', 'soutien retiré': 'l’avez retiré des soutiens'
-  };
-  // Une ligne par action ; la note n'est montrée que lorsqu'elle change.
-  function lignesHisto(o) {
-    var l = etat.histo[o.id] || [], derniereNote = '', statutAvant = 'a_appeler', out = [];
-    l.forEach(function (e) {
-      var vous = e.par === etat.moi;
-      var txt = (vous ? ACTIONS_VOUS : ACTIONS_HISTO)[e.a] || e.a;
-      var note = e.note && e.note !== derniereNote ? e.note : '';
-      var estStatut = e.a !== 'soutien ajouté' && e.a !== 'soutien retiré';
-      // Statut inchangé mais note modifiée : c'est seulement une note.
-      if (estStatut && e.a === statutAvant && e.note !== derniereNote) txt = vous ? 'avez écrit une note' : 'a écrit une note';
-      if (estStatut) statutAvant = e.a;
-      out.push({ t: e.t, a: e.a, par: e.par, note: note,
-        base: '<b>' + esc(vous ? 'Vous' : (e.par || 'Quelqu’un')) + '</b> ' + esc(txt) });
-      if (e.note) derniereNote = e.note;
-    });
-    return out;
+  // Historique : seulement les appels passés (qui et à quelle heure), pour rester lisible.
+  function appelsDe(o) {
+    return (etat.histo[o.id] || []).filter(function (e) { return e.a === 'en_cours'; });
   }
-  function ligneHTML(e, sansNote) {
-    return e.base + (e.note && !sansNote ? ' · 📝 « ' + esc(e.note) + ' »' : '');
-  }
+  function quiAppel(e) { return e.par === etat.moi ? 'vous' : (e.par || 'quelqu’un'); }
   function histoHTML(o) {
-    var l = lignesHisto(o);
+    var l = appelsDe(o);
     if (!l.length) return '';
     var der = l[l.length - 1];
     var bouton = function (txt) { return '<button type="button" data-action="histo">' + txt + '</button>'; };
-    if (etat.ouverts[o.id]) {
-      return '<div class="histo"><span>🕘 Historique</span>' + bouton('Masquer') + '</div>' +
+    if (etat.ouverts[o.id] && l.length > 1) {
+      return '<div class="histo"><span>📞 Appels</span>' + bouton('Masquer') + '</div>' +
         '<ol class="histo-liste">' + l.slice().reverse().map(function (e) {
-          return '<li><time>' + jour(e.t) + heure(e.t) + '</time>' + ligneHTML(e) + '</li>';
+          return '<li><time>' + jour(e.t) + heure(e.t) + '</time> <b>' + esc(quiAppel(e)) + '</b></li>';
         }).join('') + '</ol>';
     }
-    // La dernière action est déjà écrite dans le bandeau de statut : on ne la répète pas.
-    var doublon = st(o) !== 'a_appeler' && der.a === o.statut && der.par === o.par;
-    if (doublon) return l.length > 1 ? '<div class="histo">' + bouton('🕘 Historique (' + l.length + ')') + '</div>' : '';
-    return '<div class="histo"><span>🕘 ' + ligneHTML(der, der.note === o.note) + ' · ' + jour(der.t) + heure(der.t) + '</span>' +
-      (l.length > 1 ? bouton('Historique (' + l.length + ')') : '') + '</div>';
+    // Appel en cours : le bandeau jaune le dit déjà.
+    var enCours = st(o) === 'en_cours' && der.par === o.par;
+    var autres = l.length > 1 ? bouton('Tous les appels (' + l.length + ')') : '';
+    if (enCours) return autres ? '<div class="histo">' + autres + '</div>' : '';
+    return '<div class="histo"><span>📞 Appelé par <b>' + esc(quiAppel(der)) + '</b> · ' + jour(der.t) + heure(der.t) + '</span>' + autres + '</div>';
   }
 
   // ---------- Accès aux données (script Google, sans compte) ----------
