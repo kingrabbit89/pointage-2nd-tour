@@ -132,6 +132,23 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
 .actions .a-va_voter[aria-pressed="true"] { background: var(--bleu); }
 .actions .a-pas_repondu[aria-pressed="true"] { background: var(--orange); }
 .actions .a-contre[aria-pressed="true"] { background: var(--gris); border-color: var(--gris); }
+.histo { font-size: .86rem; color: var(--doux); display: flex; justify-content: space-between; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+.histo b { color: var(--texte); font-weight: 600; }
+.histo button { background: transparent; border: 0; color: var(--accent); text-decoration: underline; font-size: .86rem; padding: 2px 0; }
+.histo-liste { margin: 0; padding: 8px 10px; list-style: none; background: var(--fond); border-radius: 8px; font-size: .86rem; color: var(--doux); display: grid; gap: 5px; overflow-wrap: anywhere; }
+.histo-liste b { color: var(--texte); font-weight: 600; }
+.histo-liste time { font-variant-numeric: tabular-nums; color: var(--texte); margin-right: 4px; }
+#fond-resultat { position: fixed; inset: 0; background: rgba(10,16,30,.5); display: grid; place-items: end center; z-index: 40; }
+#boite-resultat { background: var(--carte); width: 100%; max-width: 560px; border-radius: 18px 18px 0 0; padding: 20px max(16px, env(safe-area-inset-left)) calc(20px + env(safe-area-inset-bottom)); display: grid; gap: 12px; }
+#boite-resultat h2 { margin: 0; font-size: 1.2rem; text-wrap: balance; }
+#boite-resultat p { margin: 0; color: var(--doux); }
+.choix-resultat { display: grid; gap: 10px; }
+.choix-resultat button { padding: 16px; border-radius: 12px; font-size: 1.08rem; font-weight: 700; border: 2px solid var(--trait); background: var(--carte); text-align: left; }
+.choix-resultat .a-a_vote { border-color: var(--vert); color: var(--vert); }
+.choix-resultat .a-va_voter { border-color: var(--bleu); color: var(--bleu); }
+.choix-resultat .a-pas_repondu { border-color: var(--orange); color: var(--orange); }
+.choix-resultat .a-contre { border-color: #b9bec8; color: var(--gris); }
+#res-plus-tard { background: transparent; border: 0; color: var(--doux); text-decoration: underline; font-size: .95rem; padding: 8px; }
 .bas { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lien-note { background: transparent; border: 0; color: var(--accent); text-decoration: underline; font-size: .9rem; padding: 2px 0; }
 .soutien-btn { border: 2px solid var(--violet); color: var(--violet); background: var(--carte); border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: .88rem; }
@@ -223,6 +240,20 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
   </div>
 </div>
 
+<div id="fond-resultat" class="cache">
+  <div id="boite-resultat" role="dialog" aria-modal="true" aria-labelledby="titre-resultat">
+    <h2 id="titre-resultat">Votre appel</h2>
+    <p>Qu’a donné l’appel ? Touchez la réponse.</p>
+    <div class="choix-resultat">
+      <button type="button" class="a-a_vote" data-res="a_vote">✅ A voté</button>
+      <button type="button" class="a-va_voter" data-res="va_voter">🗳️ Va voter</button>
+      <button type="button" class="a-pas_repondu" data-res="pas_repondu">📵 Pas répondu</button>
+      <button type="button" class="a-contre" data-res="contre">✖ Pas pour nous</button>
+    </div>
+    <button type="button" id="res-plus-tard">Je n’ai pas pu appeler / plus tard</button>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -238,11 +269,12 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
   ];
   var PAGE = 60;                 // fiches affichées d'un coup, pour rester rapide sur téléphone
   var RAFRAICHIR_MS = 12000;
+  var DUREE_APPEL_MS = 5 * 60000;   // au-delà, un appel sans résultat noté libère la fiche
 
   var etat = {
     code: lire('code') || '', moi: lire('moi') || '',
     electeurs: [], parId: {}, onglet: 'appeler', filtre: 'tous', recherche: '', limite: PAGE,
-    annulable: null
+    annulable: null, histo: {}, jTotal: 0, ouverts: {}
   };
 
   // ---------- Petites aides ----------
@@ -265,6 +297,68 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     if (m < 1) return 'à l’instant';
     if (m < 60) return 'depuis ' + m + ' min';
     return 'depuis ' + heure(ms);
+  }
+
+  // Statut affiché : un « en cours » de plus de 5 minutes sans résultat redevient « à appeler ».
+  function st(o) {
+    return o.statut === 'en_cours' && o.maj && Date.now() - o.maj > DUREE_APPEL_MS ? 'a_appeler' : o.statut;
+  }
+  function jour(ms) {
+    var d = new Date(ms), n = new Date();
+    return d.toDateString() === n.toDateString() ? '' : String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' ';
+  }
+  var ACTIONS_HISTO = {
+    en_cours: 'a appelé', a_vote: 'a noté : ✅ A voté', va_voter: 'a noté : 🗳️ Va voter',
+    pas_repondu: 'a noté : 📵 Pas répondu', contre: 'a noté : ✖ Pas pour nous',
+    a_appeler: 'a remis « à appeler »', 'soutien ajouté': 'l’a classé ★ soutien', 'soutien retiré': 'l’a retiré des soutiens'
+  };
+  function ajouterJournal(j, change) {
+    if (!j) return;
+    if (j.total < etat.jTotal) { etat.histo = {}; etat.jTotal = 0; return; }   // journal nettoyé : tout est relu au tour suivant
+    (j.lignes || []).forEach(function (l) {
+      if (!l[2]) return;
+      (etat.histo[l[2]] = etat.histo[l[2]] || []).push({ t: l[0], par: l[1], a: l[3], note: l[4] || '' });
+      if (change && change.indexOf(l[2]) < 0) change.push(l[2]);
+    });
+    etat.jTotal = j.total;
+  }
+  var ACTIONS_VOUS = {
+    en_cours: 'avez appelé', a_vote: 'avez noté : ✅ A voté', va_voter: 'avez noté : 🗳️ Va voter',
+    pas_repondu: 'avez noté : 📵 Pas répondu', contre: 'avez noté : ✖ Pas pour nous',
+    a_appeler: 'avez remis « à appeler »', 'soutien ajouté': 'l’avez classé ★ soutien', 'soutien retiré': 'l’avez retiré des soutiens'
+  };
+  // Une ligne par action ; la note n'est montrée que lorsqu'elle change.
+  function lignesHisto(o) {
+    var l = etat.histo[o.id] || [], derniereNote = '', out = [];
+    l.forEach(function (e) {
+      var vous = e.par === etat.moi;
+      var txt = (vous ? ACTIONS_VOUS : ACTIONS_HISTO)[e.a] || e.a;
+      var note = e.note && e.note !== derniereNote ? e.note : '';
+      out.push({ t: e.t, a: e.a, par: e.par, note: note,
+        base: '<b>' + esc(vous ? 'Vous' : (e.par || 'Quelqu’un')) + '</b> ' + esc(txt) });
+      if (e.note) derniereNote = e.note;
+    });
+    return out;
+  }
+  function ligneHTML(e, sansNote) {
+    return e.base + (e.note && !sansNote ? ' · 📝 « ' + esc(e.note) + ' »' : '');
+  }
+  function histoHTML(o) {
+    var l = lignesHisto(o);
+    if (!l.length) return '';
+    var der = l[l.length - 1];
+    var bouton = function (txt) { return '<button type="button" data-action="histo">' + txt + '</button>'; };
+    if (etat.ouverts[o.id]) {
+      return '<div class="histo"><span>🕘 Historique</span>' + bouton('Masquer') + '</div>' +
+        '<ol class="histo-liste">' + l.slice().reverse().map(function (e) {
+          return '<li><time>' + jour(e.t) + heure(e.t) + '</time>' + ligneHTML(e) + '</li>';
+        }).join('') + '</ol>';
+    }
+    // La dernière action est déjà écrite dans le bandeau de statut : on ne la répète pas.
+    var doublon = st(o) !== 'a_appeler' && der.a === o.statut && der.par === o.par;
+    if (doublon) return l.length > 1 ? '<div class="histo">' + bouton('🕘 Historique (' + l.length + ')') + '</div>' : '';
+    return '<div class="histo"><span>🕘 ' + ligneHTML(der, der.note === o.note) + ' · ' + jour(der.t) + heure(der.t) + '</span>' +
+      (l.length > 1 ? bouton('Historique (' + l.length + ')') : '') + '</div>';
   }
 
   // ---------- Accès aux données (script Google, sans compte) ----------
@@ -329,18 +423,22 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
       etat.electeurs = r.electeurs;
       etat.parId = {};
       r.electeurs.forEach(function (o) { o.cle = sansAccent(o.nom + ' ' + o.prenom + ' ' + o.prenom + ' ' + o.nom); etat.parId[o.id] = o; });
+      etat.histo = {}; etat.jTotal = 0;
+      ajouterJournal(r.journal);
       $('accueil').classList.add('cache');
       $('appli').classList.remove('cache');
       $('moi').textContent = '👤 ' + etat.moi;
       rendre();
       reseau('');
+      verifierRetourAppel();
     });
   }
 
   function rafraichir() {
     if (!etat.electeurs.length || document.hidden) return;
-    appel('chargerStatuts', etat.code).then(function (r) {
+    appel('chargerStatuts', etat.code, etat.jTotal).then(function (r) {
       var change = [];
+      ajouterJournal(r.journal, change);
       var sout = {};
       (r.soutiens || []).forEach(function (id) { sout[id] = true; });
       etat.electeurs.forEach(function (o) {
@@ -360,8 +458,9 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
 
   // ---------- Filtres et affichage ----------
   function visible(o) {
-    if (etat.onglet === 'appeler' && (o.statut === 'a_vote' || o.statut === 'contre')) return false;
-    if (etat.onglet === 'vote' && o.statut !== 'a_vote') return false;
+    var s = st(o);
+    if (etat.onglet === 'appeler' && (s === 'a_vote' || s === 'contre')) return false;
+    if (etat.onglet === 'vote' && s !== 'a_vote') return false;
     if (etat.filtre === 'soutien' && !o.soutien) return false;
     if (etat.filtre === 'absent' && o.t1) return false;
     if (etat.filtre === 'vote1' && !o.t1) return false;
@@ -382,22 +481,24 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     var h = '<div><div class="nom">' + esc(o.nom) + ' <small>' + esc(o.prenom) + '</small></div>' +
             '<div class="badges">' + badges.join('') + '</div></div>';
     if (o.info) h += '<div class="info">💬 ' + esc(o.info) + '</div>';
-    if (o.statut && o.statut !== 'a_appeler') {
+    var s = st(o);
+    if (s && s !== 'a_appeler') {
       var qui = o.par ? (o.par === etat.moi ? 'vous' : o.par) : '';
-      var txt = o.statut === 'en_cours'
+      var txt = s === 'en_cours'
         ? '📞 ' + esc(qui === 'vous' ? 'Vous l’appelez' : qui + ' l’appelle') + ' ' + depuis(o.maj)
-        : LIBELLES[o.statut] + (qui ? ' · noté par ' + esc(qui) : '') + (o.maj ? ' à ' + heure(o.maj) : '');
-      h += '<div class="statut s-' + o.statut + '"><span>' + txt + '</span>' +
+        : LIBELLES[s] + (qui ? ' · noté par ' + esc(qui) : '') + (o.maj ? ' à ' + heure(o.maj) : '');
+      h += '<div class="statut s-' + s + '"><span>' + txt + '</span>' +
            '<button type="button" class="remettre" data-action="a_appeler">Remettre à appeler</button></div>';
     }
     if (o.note) h += '<div class="note">📝 ' + esc(o.note) + '</div>';
-    if (o.statut !== 'a_vote') {
+    h += histoHTML(o);
+    if (s !== 'a_vote') {
       h += o.telIntl
         ? '<a class="appeler" href="tel:' + esc(o.telIntl) + '" data-action="appel">📞 Appeler <span>' + esc(o.tel) + '</span></a>'
         : '<div class="sans-tel">Pas de numéro dans la liste</div>';
     }
     h += '<div class="actions">' + BOUTONS.map(function (b) {
-      return '<button type="button" class="a-' + b[0] + '" data-action="' + b[0] + '" aria-pressed="' + (o.statut === b[0]) + '">' + b[1] + '</button>';
+      return '<button type="button" class="a-' + b[0] + '" data-action="' + b[0] + '" aria-pressed="' + (s === b[0]) + '">' + b[1] + '</button>';
     }).join('') + '</div>';
     h += '<div class="bas"><button type="button" class="lien-note" data-action="note">' + (o.note ? 'Modifier la note' : 'Ajouter une note') + '</button>' +
          '<button type="button" class="soutien-btn" data-action="soutien" aria-pressed="' + !!o.soutien + '">' + (o.soutien ? '★ Soutien' : '☆ Classer soutien') + '</button></div>';
@@ -411,7 +512,7 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     var zone = $('liste');
     var montres = l.slice(0, etat.limite);
     zone.innerHTML = montres.map(function (o) {
-      return '<article class="fiche s-' + o.statut + '" data-id="' + o.id + '">' + ficheHTML(o) + '</article>';
+      return '<article class="fiche s-' + st(o) + '" data-id="' + o.id + '">' + ficheHTML(o) + '</article>';
     }).join('') || '<div class="vide">Personne ici' + (etat.recherche ? ' pour « ' + esc(etat.recherche) + ' »' : '') + '.</div>';
     $('plus').classList.toggle('cache', l.length <= etat.limite);
     $('plus').textContent = 'Afficher plus de noms (' + (l.length - montres.length) + ' restants)';
@@ -428,16 +529,17 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     var o = etat.parId[id];
     var el = document.querySelector('.fiche[data-id="' + id + '"]');
     if (!el || !o) return;
-    el.className = 'fiche s-' + o.statut;
+    el.className = 'fiche s-' + st(o);
     el.innerHTML = ficheHTML(o);
   }
 
   function compter() {
     var v = 0, p = 0, r = 0;
     etat.electeurs.forEach(function (o) {
-      if (o.statut === 'a_vote') v++;
-      else if (o.statut === 'va_voter') p++;
-      if (o.statut !== 'a_vote' && o.statut !== 'contre') r++;
+      var s = st(o);
+      if (s === 'a_vote') v++;
+      else if (s === 'va_voter') p++;
+      if (s !== 'a_vote' && s !== 'contre') r++;
     });
     $('n-vote').textContent = v; $('n-promis').textContent = p; $('n-reste').textContent = r;
   }
@@ -453,7 +555,7 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
       o.par = avant.par;
     });
     return appel('changerStatut', etat.code, o.id, statut, etat.moi, note === undefined ? null : note)
-      .then(function (r) { o.maj = r.maj; o.par = r.par; o.note = r.note; majFiche(o.id); })
+      .then(function (r) { o.maj = r.maj; o.par = r.par; o.note = r.note; majFiche(o.id); rafraichir(); })
       .catch(function () {
         o.statut = avant.statut; o.par = avant.par; o.maj = avant.maj; o.note = avant.note;
         majFiche(o.id); compter();
@@ -467,12 +569,15 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
     var a = b.dataset.action;
     if (a === 'appel') {
       // On laisse le téléphone composer le numéro, et on prévient l'équipe.
-      if (o.statut === 'a_appeler' || o.statut === 'pas_repondu' || o.statut === 'va_voter' || (o.statut === 'en_cours' && o.par !== etat.moi)) {
-        if (o.statut === 'en_cours' && o.par && o.par !== etat.moi) {
+      var s0 = st(o);
+      memoriserAppel(o);
+      if (s0 === 'a_appeler' || s0 === 'pas_repondu' || s0 === 'va_voter' || s0 === 'contre' || (s0 === 'en_cours' && o.par !== etat.moi) || (o.statut === 'en_cours' && s0 !== 'en_cours')) {
+        if (s0 === 'en_cours' && o.par && o.par !== etat.moi) {
           if (!b.dataset.confirme) {
             e.preventDefault();
             b.dataset.confirme = '1';
             b.innerHTML = '⚠️ ' + esc(o.par) + ' appelle déjà. Appuyez encore pour appeler quand même';
+            oublierAppel();
             return;
           }
         }
@@ -481,10 +586,43 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
       return;
     }
     if (a === 'note') { ouvrirNote(o); return; }
+    if (a === 'histo') { etat.ouverts[o.id] = !etat.ouverts[o.id]; majFiche(o.id); return; }
     if (a === 'soutien') { basculerSoutien(o); return; }
-    if (a === o.statut && a !== 'a_appeler') a = 'a_appeler';   // ré-appuyer annule
+    if (a === st(o) && a !== 'a_appeler') a = 'a_appeler';   // ré-appuyer annule
     changer(o, a);
   });
+
+  // ---------- Résultat demandé au retour de l'appel ----------
+  // Après « Appeler », le téléphone passe à l'appel ; au retour sur la page,
+  // une grande fenêtre demande le résultat, pour ne pas laisser la fiche « en cours ».
+  var appelEnCours = null;
+  function memoriserAppel(o) {
+    appelEnCours = { id: o.id, t: Date.now() };
+    ecrire('appel', JSON.stringify(appelEnCours));
+  }
+  function oublierAppel() {
+    appelEnCours = null;
+    ecrire('appel', '');
+  }
+  function verifierRetourAppel() {
+    if (!appelEnCours) { try { appelEnCours = JSON.parse(lire('appel') || 'null'); } catch (e) { appelEnCours = null; } }
+    if (!appelEnCours || !etat.electeurs.length) return;
+    var ecoule = Date.now() - appelEnCours.t;
+    var o = etat.parId[appelEnCours.id];
+    if (!o || ecoule > 60 * 60000) { oublierAppel(); return; }
+    if (ecoule < 2500) return;                         // pas encore parti appeler
+    if (o.statut !== 'en_cours' || o.par !== etat.moi) { oublierAppel(); return; }   // déjà noté ici ou par un autre
+    $('titre-resultat').textContent = 'Votre appel à ' + o.nom + ' ' + o.prenom;
+    $('fond-resultat').classList.remove('cache');
+  }
+  function fermerResultat() { $('fond-resultat').classList.add('cache'); }
+  document.querySelector('.choix-resultat').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-res]'); if (!b || !appelEnCours) return;
+    var o = etat.parId[appelEnCours.id];
+    oublierAppel(); fermerResultat();
+    if (o) changer(o, b.dataset.res);
+  });
+  $('res-plus-tard').addEventListener('click', function () { oublierAppel(); fermerResultat(); });
 
   // ---------- Soutien ----------
   function basculerSoutien(o, silencieux) {
@@ -495,6 +633,7 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
       basculerSoutien(o, true);
     });
     return appel('changerSoutien', etat.code, o.id, o.soutien, etat.moi)
+      .then(function () { rafraichir(); })
       .catch(function () {
         o.soutien = avant; majFiche(o.id);
         toast('⚠️ Pas enregistré (connexion). Réessayez.');
@@ -557,9 +696,12 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
   $('plus').addEventListener('click', function () { etat.limite += PAGE; rendre(); });
 
   setInterval(rafraichir, RAFRAICHIR_MS);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) rafraichir(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { rafraichir(); verifierRetourAppel(); } });
+  window.addEventListener('focus', verifierRetourAppel);
+  window.addEventListener('pageshow', verifierRetourAppel);
   setInterval(function () { // garde « depuis X min » à jour
     etat.electeurs.forEach(function (o) { if (o.statut === 'en_cours') majFiche(o.id); });
+    compter();
   }, 60000);
 
   // ---------- Démarrage ----------
