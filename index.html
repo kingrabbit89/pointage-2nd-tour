@@ -329,11 +329,15 @@ main { max-width: 640px; margin: 0 auto; padding: 12px max(16px, env(safe-area-i
   };
   // Une ligne par action ; la note n'est montrée que lorsqu'elle change.
   function lignesHisto(o) {
-    var l = etat.histo[o.id] || [], derniereNote = '', out = [];
+    var l = etat.histo[o.id] || [], derniereNote = '', statutAvant = 'a_appeler', out = [];
     l.forEach(function (e) {
       var vous = e.par === etat.moi;
       var txt = (vous ? ACTIONS_VOUS : ACTIONS_HISTO)[e.a] || e.a;
       var note = e.note && e.note !== derniereNote ? e.note : '';
+      var estStatut = e.a !== 'soutien ajouté' && e.a !== 'soutien retiré';
+      // Statut inchangé mais note modifiée : c'est seulement une note.
+      if (estStatut && e.a === statutAvant && e.note !== derniereNote) txt = vous ? 'avez écrit une note' : 'a écrit une note';
+      if (estStatut) statutAvant = e.a;
       out.push({ t: e.t, a: e.a, par: e.par, note: note,
         base: '<b>' + esc(vous ? 'Vous' : (e.par || 'Quelqu’un')) + '</b> ' + esc(txt) });
       if (e.note) derniereNote = e.note;
