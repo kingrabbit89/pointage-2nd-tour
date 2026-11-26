@@ -240,6 +240,7 @@ body.avec-lettres main { padding-right: calc(38px + env(safe-area-inset-right));
     <div class="filtres" role="group" aria-label="Filtrer">
       <button type="button" data-filtre="tous" aria-pressed="true">Tout le monde</button>
       <button type="button" data-filtre="soutien" aria-pressed="false">Nos soutiens</button>
+      <button type="button" data-filtre="soutien_absent" aria-pressed="false">Soutiens absents au 1er tour</button>
       <button type="button" data-filtre="absent" aria-pressed="false">Absents au 1er tour</button>
       <button type="button" data-filtre="vote1" aria-pressed="false">Ont voté au 1er tour</button>
       <button type="button" data-filtre="mes" aria-pressed="false">Mes appels</button>
@@ -297,7 +298,7 @@ body.avec-lettres main { padding-right: calc(38px + env(safe-area-inset-right));
     ['pas_repondu', '📵 Pas répondu'], ['contre', '✖ Pas pour nous']
   ];
   var PAGE = 60;                 // fiches affichées d'un coup, pour rester rapide sur téléphone
-  var VERSION = '2026-11-26-3';
+  var VERSION = '2026-11-26-4';
   var RAFRAICHIR_MS = 12000;
   var DUREE_APPEL_MS = 5 * 60000;   // au-delà, un appel sans résultat noté libère la fiche
 
@@ -494,6 +495,7 @@ body.avec-lettres main { padding-right: calc(38px + env(safe-area-inset-right));
     if (etat.onglet === 'vote' && s !== 'a_vote') return false;
     if (etat.filtre === 'soutien' && !o.soutien) return false;
     if (etat.filtre === 'absent' && o.t1) return false;
+    if (etat.filtre === 'soutien_absent' && (!o.soutien || o.t1)) return false;
     if (etat.filtre === 'vote1' && !o.t1) return false;
     if (etat.filtre === 'mes' && o.par !== etat.moi) return false;
     return true;
